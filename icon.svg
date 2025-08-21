@@ -1,0 +1,57 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Фон - мягкий градиент -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="orb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#f0f8ff;stop-opacity:0.7" />
+    </linearGradient>
+    
+    <linearGradient id="breath" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e0f7fa;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#b2ebf2;stop-opacity:0.6" />
+    </linearGradient>
+    
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Основной фон -->
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  
+  <!-- Внешний круг - символ дыхания -->
+  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#orb)" stroke-width="8" opacity="0.3"/>
+  
+  <!-- Средний круг -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#orb)" stroke-width="6" opacity="0.5"/>
+  
+  <!-- Внутренний круг - основной орб -->
+  <circle cx="256" cy="256" r="100" fill="url(#orb)" filter="url(#glow)"/>
+  
+  <!-- Центральный элемент - символ спокойствия -->
+  <circle cx="256" cy="256" r="60" fill="url(#breath)" opacity="0.8"/>
+  
+  <!-- Точки вокруг - символ дыхания -->
+  <circle cx="256" cy="156" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="356" cy="256" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="256" cy="356" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="156" cy="256" r="12" fill="url(#orb)" opacity="0.6"/>
+  
+  <!-- Диагональные точки -->
+  <circle cx="306" cy="206" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="206" cy="306" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="306" cy="306" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="206" cy="206" r="8" fill="url(#orb)" opacity="0.4"/>
+  
+  <!-- Центральная точка - фокус -->
+  <circle cx="256" cy="256" r="20" fill="url(#breath)" opacity="0.9"/>
+</svg>

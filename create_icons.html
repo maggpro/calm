@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create PWA Icons</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f5f5f5; 
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        .icon-preview { 
+            margin: 20px 0; 
+            padding: 20px; 
+            background: white; 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
+        }
+        .icon-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); 
+            gap: 15px; 
+            margin: 20px 0; 
+        }
+        .icon-item { 
+            text-align: center; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            background: white; 
+        }
+        .icon-item img { 
+            border: 1px solid #eee; 
+            border-radius: 4px; 
+            margin: 10px 0; 
+        }
+        button { 
+            background: #667eea; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 10px 5px; 
+            font-size: 16px; 
+        }
+        button:hover { background: #5a6fd8; }
+        .download-all { 
+            background: #28a745; 
+            font-size: 18px; 
+            padding: 15px 30px; 
+        }
+        .download-all:hover { background: #218838; }
+        .info { 
+            background: #e3f2fd; 
+            border-left: 4px solid #2196f3; 
+            padding: 15px; 
+            margin: 20px 0; 
+            border-radius: 4px; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Calm PWA Icon Generator</h1>
+        
+        <div class="info">
+            <h3>📱 PWA Icon Requirements:</h3>
+            <ul>
+                <li><strong>192x192</strong> - для Android и большинства устройств</li>
+                <li><strong>512x512</strong> - для высокого разрешения и App Store</li>
+                <li>Квадратная форма с закругленными углами</li>
+                <li>Четкие края и хорошая видимость в маленьком размере</li>
+            </ul>
+        </div>
+        
+        <div class="icon-preview">
+            <h2>SVG Preview</h2>
+            <div id="svgContainer" style="text-align: center;"></div>
+        </div>
+        
+        <div class="icon-preview">
+            <h2>PNG Icons</h2>
+            <button onclick="createAllIcons()">Create All Icons</button>
+            <button onclick="downloadAllIcons()" class="download-all">Download All Icons</button>
+            <div id="iconGrid" class="icon-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        // SVG код иконки
+        const svgCode = `<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    
+    <linearGradient id="orb" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#f0f8ff;stop-opacity:0.7" />
+    </linearGradient>
+    
+    <linearGradient id="breath" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e0f7fa;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#b2ebf2;stop-opacity:0.6" />
+    </linearGradient>
+    
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#orb)" stroke-width="8" opacity="0.3"/>
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#orb)" stroke-width="6" opacity="0.5"/>
+  <circle cx="256" cy="256" r="100" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="60" fill="url(#breath)" opacity="0.8"/>
+  <circle cx="256" cy="156" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="356" cy="256" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="256" cy="356" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="156" cy="256" r="12" fill="url(#orb)" opacity="0.6"/>
+  <circle cx="306" cy="206" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="206" cy="306" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="306" cy="306" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="206" cy="206" r="8" fill="url(#orb)" opacity="0.4"/>
+  <circle cx="256" cy="256" r="20" fill="url(#breath)" opacity="0.9"/>
+</svg>`;
+
+        // Показываем SVG
+        document.getElementById('svgContainer').innerHTML = svgCode;
+
+        let generatedIcons = [];
+
+        function createAllIcons() {
+            const sizes = [16, 32, 48, 64, 128, 192, 256, 512];
+            const grid = document.getElementById('iconGrid');
+            grid.innerHTML = '';
+            generatedIcons = [];
+
+            sizes.forEach(size => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = size;
+                canvas.height = size;
+
+                // Создаем Image из SVG
+                const img = new Image();
+                img.onload = function() {
+                    // Очищаем canvas
+                    ctx.clearRect(0, 0, size, size);
+                    
+                    // Рисуем иконку
+                    ctx.drawImage(img, 0, 0, size, size);
+                    
+                    // Сохраняем canvas для скачивания
+                    generatedIcons.push({ size, canvas });
+                    
+                    // Добавляем в сетку
+                    const item = document.createElement('div');
+                    item.className = 'icon-item';
+                    item.innerHTML = `
+                        <h3>${size}x${size}</h3>
+                        <img src="${canvas.toDataURL('image/png')}" width="${size}" height="${size}" alt="${size}x${size}">
+                        <button onclick="downloadIcon(${size})">Download</button>
+                    `;
+                    grid.appendChild(item);
+                };
+                
+                // Конвертируем SVG в data URL
+                const svgBlob = new Blob([svgCode], {type: 'image/svg+xml'});
+                const url = URL.createObjectURL(svgBlob);
+                img.src = url;
+            });
+        }
+
+        function downloadIcon(size) {
+            const icon = generatedIcons.find(i => i.size === size);
+            if (icon) {
+                const link = document.createElement('a');
+                link.download = `icon-${size}.png`;
+                link.href = icon.canvas.toDataURL('image/png');
+                link.click();
+            }
+        }
+
+        function downloadAllIcons() {
+            generatedIcons.forEach(icon => {
+                const link = document.createElement('a');
+                link.download = `icon-${icon.size}.png`;
+                link.href = icon.canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        // Автоматически создаем иконки при загрузке
+        window.onload = function() {
+            setTimeout(createAllIcons, 500);
+        };
+    </script>
+</body>
+</html>
