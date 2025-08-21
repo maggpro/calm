@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="auto">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Calm — дыхание, журнал</title>
+
+    <!--
+      Инструкция по запуску локально:
+      1) Откройте терминал в папке проекта и запустите локальный сервер:
+         - python3 -m http.server 8080
+           или
+         - npx http-server -p 8080 --no-dotfiles --cors
+      2) Перейдите в браузер: http://localhost:8080
+      3) В меню браузера выберите "Установить приложение" (PWA) / "Добавить на экран".
+      Приложение работает офлайн после первого запуска благодаря Service Worker.
+
+      Идеи для улучшений:
+      - Экспорт журнала в CSV
+      - Добавление новых дыхательных режимов
+      - Рекомендации на основе истории
+      - Кастомизация цветовых схем и интерфейса
+    -->
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #0d0d0d;
+        --muted: #6b7280;
+        --accent: #5b9df9;
+        --card: #f5f7fb;
+        --border: #e5e7eb;
+        --danger: #ef4444;
+        --orb-start: #7c3aed;
+        --orb-end: #06b6d4;
+        --bottom-nav: 76px;
+      }
+      @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] {
+          --bg: #0c0c0e;
+          --fg: #f5f5f5;
+          --muted: #9aa0a6;
+          --accent: #7ab2ff;
+          --card: #141418;
+          --border: #25262b;
+          --danger: #f87171;
+          --orb-start: #3b82f6;
+          --orb-end: #10b981;
+        }
+      }
+      html[data-theme="dark"] {
+        --bg: #0c0c0e;
+        --fg: #f5f5f5;
+        --muted: #9aa0a6;
+        --accent: #7ab2ff;
+        --card: #141418;
+        --border: #25262b;
+        --danger: #f87171;
+        --orb-start: #3b82f6;
+        --orb-end: #10b981;
+      }
+      html[data-theme="light"] {
+        --bg: #ffffff;
+        --fg: #0d0d0d;
+        --muted: #6b7280;
+        --accent: #5b9df9;
+        --card: #f5f7fb;
+        --border: #e5e7eb;
+        --danger: #ef4444;
+        --orb-start: #7c3aed;
+        --orb-end: #06b6d4;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { min-height: 100%; height: auto; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--fg);
+        background: var(--bg);
+        -webkit-tap-highlight-color: transparent;
+        overflow-y: auto;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: saturate(180%) blur(12px);
+        background: color-mix(in oklab, var(--bg) 88%, transparent);
+        border-bottom: 1px solid var(--border);
+      }
+      .container { max-width: 980px; margin: 0 auto; padding: 12px 16px; }
+      .brand { font-weight: 700; letter-spacing: 0.2px; }
+      nav { display: flex; gap: 8px; flex-wrap: wrap; }
+      header nav { display: none; }
+      @media (max-width: 860px) {
+        nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 6px; }
+        nav::-webkit-scrollbar { display: none; }
+      }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+      .tab {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--fg);
+        padding: 12px 16px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: transform 180ms ease, background 220ms ease, border-color 220ms ease;
+      }
+      .tab[aria-current="page"], .tab:active {
+        background: color-mix(in oklab, var(--accent) 18%, var(--card));
+        border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
+        box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 50%, transparent);
+      }
+      .tab:active { transform: scale(0.98); }
+
+      main { padding: 20px 16px calc(40px + var(--bottom-nav) + env(safe-area-inset-bottom)); }
+      section[hidden] { display: none !important; }
+      section {
+        max-width: 980px; margin: 0 auto;
+        animation: fade 280ms ease;
+      }
+      @keyframes fade { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+      }
+      .grid {
+        display: grid; gap: 16px;
+        grid-template-columns: repeat(12, 1fr);
+      }
+      @media (max-width: 860px) {
+        .row { flex-direction: column; align-items: stretch; }
+        nav { width: 100%; }
+      }
+
+      h1 { font-size: clamp(22px, 3vw, 28px); margin: 4px 0 12px; }
+      h2 { font-size: clamp(18px, 2.4vw, 22px); margin: 0 0 12px; }
+      label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+      input[type="range"], select, textarea {
+        width: 100%;
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+      /* Enhanced select styling for better mobile UX */
+      select#mode {
+        appearance: none;
+        background: var(--bg);
+        padding-right: 42px;
+        min-height: 44px;
+        font-size: 16px;
+        line-height: 1.2;
+        background-image:
+          linear-gradient(45deg, var(--muted) 50%, transparent 50%),
+          linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+        background-position:
+          calc(100% - 26px) 50%,
+          calc(100% - 18px) 50%;
+        background-size: 8px 8px, 8px 8px;
+        background-repeat: no-repeat;
+      }
+      select#mode:focus { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 35%, transparent); border-color: color-mix(in oklab, var(--accent) 50%, var(--border)); }
+      textarea { min-height: 90px; resize: vertical; }
+      .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+      .btn {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--fg);
+        padding: 10px 14px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: transform 160ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
+      }
+      .btn:hover { border-color: color-mix(in oklab, var(--accent) 40%, var(--border)); }
+      .btn:active { transform: translateY(1px); }
+      .btn-primary {
+        background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 30%, var(--bg)), color-mix(in oklab, var(--accent) 15%, var(--bg)));
+        border-color: color-mix(in oklab, var(--accent) 50%, var(--border));
+      }
+      .btn-danger { border-color: color-mix(in oklab, var(--danger) 60%, var(--border)); color: var(--danger); }
+      .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+      .switch input { appearance: none; width: 42px; height: 24px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); position: relative; outline: none; transition: background 220ms ease; }
+      .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: var(--bg); border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.15); transition: transform 220ms ease; }
+      .switch input:checked { background: color-mix(in oklab, var(--accent) 35%, var(--card)); }
+      .switch input:checked::after { transform: translateX(18px); }
+
+      /* ORB */
+      .orb-wrap { display: grid; place-items: center; padding: 16px; }
+      .orb-shell {
+        position: relative;
+        width: min(60vmin, 360px);
+        aspect-ratio: 1/1;
+        border-radius: 50%;
+        overflow: hidden;
+        isolation: isolate;
+        cursor: pointer;
+        transform: translateZ(0);
+      }
+      .orb-backdrop {
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background:
+          radial-gradient(closest-side circle at 50% 50%, color-mix(in oklab, var(--orb-end) 28%, var(--bg)) 0%, rgba(0,0,0,0) 72%),
+          radial-gradient(circle at 30% 30%, color-mix(in oklab, var(--orb-start) 24%, var(--bg)) 0%, rgba(0,0,0,0) 62%),
+          radial-gradient(circle at 70% 70%, color-mix(in oklab, var(--accent) 18%, var(--bg)) 0%, rgba(0,0,0,0) 62%);
+        filter: blur(40px) saturate(1.0);
+        opacity: .0;
+        transform: scale(1.12);
+        transition: opacity 300ms ease;
+        will-change: transform, opacity;
+        z-index: 0;
+        pointer-events: none;
+      }
+      .orb-backdrop.active { opacity: .5; }
+      .orb {
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 80%; height: 80%;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%,
+          color-mix(in oklab, var(--orb-start) 55%, var(--bg)) 0%,
+          color-mix(in oklab, var(--orb-end) 45%, var(--bg)) 65%,
+          color-mix(in oklab, var(--bg) 96%, transparent) 100%);
+        filter: drop-shadow(0 6px 16px color-mix(in oklab, var(--orb-start) 20%, transparent));
+        transition: filter 400ms ease, opacity 240ms ease;
+        will-change: transform, filter;
+        transform-origin: 50% 50%;
+        transform: translate(-50%, -50%) scale(1);
+        backface-visibility: hidden;
+      }
+      .orb.panic { opacity: .6; filter: drop-shadow(0 6px 18px rgba(0,0,0,.25)); animation: none; }
+      .orb-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; transform-origin: 50% 50%; backface-visibility: hidden; will-change: transform; }
+      .orb-overlay { position: absolute; inset: 0; display: grid; place-items: center; }
+      .phase { text-align: center; color: var(--fg); font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+      .timer { text-align: center; font-variant-numeric: tabular-nums; opacity: .9; margin-top: 6px; }
+      /* hue animation отключена для пастельной палитры */
+
+      /* Layouts */
+      .grid-2 { display: grid; grid-template-columns: 1.2fr .8fr; gap: 16px; }
+      @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+      .stack { display: grid; gap: 12px; }
+
+      ul.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+      .item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); display: grid; gap: 2px; }
+      .item .meta { font-size: 12px; color: var(--muted); }
+
+      /* Mobile bottom nav */
+      .mobile-nav { display: block; }
+      .mobile-nav {
+        position: fixed; left: 0; right: 0; bottom: 0;
+        z-index: 20;
+        backdrop-filter: saturate(180%) blur(12px);
+        background: color-mix(in oklab, var(--bg) 88%, transparent);
+        border-top: 1px solid var(--border);
+        padding: 8px max(8px, env(safe-area-inset-left)) calc(8px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
+      }
+      .mobile-nav .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .mobile-nav .tab { width: 100%; text-align: center; padding: 12px 8px; }
+      body { padding-bottom: calc(var(--bottom-nav) + env(safe-area-inset-bottom)); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <div class="row">
+          <div class="brand">Calm</div>
+          <nav aria-label="Основная навигация">
+            <button class="tab" data-tab="breath" aria-current="page">Дыхание</button>
+
+            <button class="tab" data-tab="journal">Журнал</button>
+            <button class="tab" data-tab="settings">Настройки</button>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- ДЫХАНИЕ -->
+      <section id="breath" class="stack">
+        <h1>Дыхание</h1>
+        <div class="grid-2">
+          <div class="card">
+            <div class="orb-wrap">
+              <div class="orb-shell">
+                <div id="orbBackdrop" class="orb-backdrop" aria-hidden="true"></div>
+                <div id="orb" class="orb" aria-hidden="true"></div>
+                <canvas id="orbCanvas" class="orb-canvas" aria-hidden="true"></canvas>
+                <div class="orb-overlay">
+                  <div>
+                    <div id="phase" class="phase">Готовы?</div>
+                    <div id="timeLeft" class="timer">00:00</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <label for="mode">Режим дыхания</label>
+              <select id="mode" aria-describedby="modeInfo">
+                <option value="478">4-7-8</option>
+                <option value="box">Box Breathing (4-4-4-4)</option>
+                <option value="coh">Когерентное (5-5)</option>
+              </select>
+              <div style="height:8px"></div>
+              <div id="modeInfo" class="meta" style="font-size:13px;color:var(--muted)"></div>
+              <div style="height:8px"></div>
+              <label for="minutes">Длительность: <span id="minutesLabel">3</span> <span id="minutesUnit">мин</span></label>
+              <input type="range" id="minutes" min="1" max="10" value="3" />
+              <div class="controls" style="margin-top:10px;">
+                <button id="startBreath" class="btn btn-primary">Старт</button>
+                <button id="stopBreath" class="btn">Стоп</button>
+                <button id="panicBreath" class="btn btn-danger">Паника</button>
+              </div>
+            </div>
+            <div class="card">
+              <h2 id="tipsTitle">Подсказки</h2>
+              <div id="tipsText" style="font-size:14px;color:var(--muted);line-height:1.5">
+                Следуйте подсказкам: вдох, задержка, выдох. Сфокусируйтесь на плавности.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+
+      <!-- ЖУРНАЛ -->
+      <section id="journal" hidden class="stack">
+        <h1>Журнал</h1>
+        <div class="grid-2">
+          <div class="card">
+            <label for="stressLevel">Уровень стресса: <strong><span id="stressLevelLabel">5</span>/10</strong></label>
+            <input type="range" id="stressLevel" min="1" max="10" value="5" />
+            <div style="height:8px"></div>
+            <label for="note">Заметка</label>
+            <textarea id="note" placeholder="Коротко опишите своё состояние..."></textarea>
+            <div style="height:10px"></div>
+            <div class="controls">
+              <button id="saveEntry" class="btn btn-primary">Сохранить</button>
+              <button id="clearEntries" class="btn btn-danger">Удалить всё</button>
+            </div>
+          </div>
+          <div class="card">
+            <h2 id="journalHistory">История</h2>
+            <ul id="entries" class="list" aria-live="polite"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- НАСТРОЙКИ -->
+      <section id="settings" hidden class="stack">
+        <h1>Настройки</h1>
+        <div class="grid">
+          <div class="card" style="grid-column: span 12; display:grid; gap:12px;">
+            <label class="switch"><input id="vibrationToggle" type="checkbox" /> Вибрация</label>
+            <label class="switch"><input id="voiceToggle" type="checkbox" /> Голосовые подсказки</label>
+            <div>
+              <label for="themeSelect">Тема</label>
+              <select id="themeSelect">
+                <option value="auto">Авто</option>
+                <option value="light">Светлая</option>
+                <option value="dark">Тёмная</option>
+              </select>
+            </div>
+            <div>
+              <label for="langSelect">Язык</label>
+              <select id="langSelect">
+                <option value="auto">Авто</option>
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="es">Español</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
+            <div id="persistNote" style="font-size:12px;color:var(--muted)">Настройки сохраняются локально и применяются при следующем запуске.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom mobile navigation -->
+    <nav class="mobile-nav" aria-label="Навигация снизу">
+      <div class="container">
+        <div class="tabs">
+          <button class="tab" data-tab="breath" aria-current="page">Дыхание</button>
+
+          <button class="tab" data-tab="journal">Журнал</button>
+          <button class="tab" data-tab="settings">Настройки</button>
+        </div>
+      </div>
+    </nav>
+
+    <script>
+      // ================= I18N =================
+      const I18N = {
+        ru: {
+          app: 'Calm',
+          title: 'Calm — дыхание, журнал',
+          tabs: { breath: 'Дыхание', journal: 'Журнал', settings: 'Настройки' },
+          phases: { inhale: 'Вдох', exhale: 'Выдох', hold: 'Задержка', pause: 'Пауза', ready: 'Готовы?' },
+          breathing: { title: 'Дыхание', mode: 'Режим дыхания', duration: 'Длительность', start: 'Старт', stop: 'Стоп', panic: 'Паника', tips: 'Следуйте подсказкам: вдох, задержка, выдох. Сфокусируйтесь на плавности.' },
+
+          journal: { title: 'Журнал', level: 'Уровень стресса', note: 'Заметка', save: 'Сохранить', clear: 'Удалить всё', empty: 'Пока нет записей', history: 'История', note_placeholder: 'Коротко опишите своё состояние...', confirm_clear: 'Удалить все записи?' },
+          settings: { title: 'Настройки', vibration: 'Вибрация', voice: 'Голосовые подсказки', theme: 'Тема', theme_auto: 'Авто', theme_light: 'Светлая', theme_dark: 'Тёмная', lang: 'Язык', persist_note: 'Настройки сохраняются локально и применяются при следующем запуске.' }
+        },
+        en: {
+          app: 'Calm',
+          title: 'Calm — breathing, journal',
+          tabs: { breath: 'Breathing', journal: 'Journal', settings: 'Settings' },
+          phases: { inhale: 'Inhale', exhale: 'Exhale', hold: 'Hold', pause: 'Pause', ready: 'Ready?' },
+          breathing: { title: 'Breathing', mode: 'Breathing mode', duration: 'Duration', start: 'Start', stop: 'Stop', panic: 'Panic', tips: 'Follow the prompts: inhale, hold, exhale. Focus on smoothness.' },
+
+          journal: { title: 'Journal', level: 'Stress level', note: 'Note', save: 'Save', clear: 'Clear all', empty: 'No entries yet', history: 'History', note_placeholder: 'Briefly describe how you feel...', confirm_clear: 'Delete all entries?' },
+          settings: { title: 'Settings', vibration: 'Vibration', voice: 'Voice prompts', theme: 'Theme', theme_auto: 'Auto', theme_light: 'Light', theme_dark: 'Dark', lang: 'Language', persist_note: 'Settings are saved locally and applied on next launch.' }
+        },
+        es: {
+          app: 'Calm',
+          title: 'Calm — respiración, diario',
+          tabs: { breath: 'Respirar', journal: 'Diario', settings: 'Ajustes' },
+          phases: { inhale: 'Inhala', exhale: 'Exhala', hold: 'Mantén', pause: 'Pausa', ready: '¿Listo?' },
+          breathing: { title: 'Respirar', mode: 'Modo de respiración', duration: 'Duración', start: 'Iniciar', stop: 'Detener', panic: 'Pánico', tips: 'Sigue las indicaciones: inhala, retén, exhala. Enfócate en la suavidad.' },
+
+          journal: { title: 'Diario', level: 'Nivel de estrés', note: 'Nota', save: 'Guardar', clear: 'Borrar todo', empty: 'Aún no hay entradas', history: 'Historial', note_placeholder: 'Describe brevemente cómo te sientes...', confirm_clear: '¿Borrar todas las entradas?' },
+          settings: { title: 'Ajustes', vibration: 'Vibración', voice: 'Indicaciones por voz', theme: 'Tema', theme_auto: 'Auto', theme_light: 'Claro', theme_dark: 'Oscuro', lang: 'Idioma', persist_note: 'Los ajustes se guardan localmente y se aplican al reiniciar.' }
+        },
+        ja: {
+          app: 'Calm',
+          title: 'Calm — 呼吸・日記',
+          tabs: { breath: '呼吸', journal: '日記', settings: '設定' },
+          phases: { inhale: '吸う', exhale: '吐く', hold: '止める', pause: '休む', ready: '準備はいい？' },
+          breathing: { title: '呼吸', mode: '呼吸モード', duration: '時間', start: '開始', stop: '停止', panic: 'パニック', tips: '吸って、止めて、吐いて。ゆっくりと滑らかに。' },
+
+          journal: { title: '日記', level: 'ストレスレベル', note: 'メモ', save: '保存', clear: '全て削除', empty: 'まだ記録がありません', history: '履歴', note_placeholder: '今の気分を簡単に書いてください...', confirm_clear: 'すべての記録を削除しますか？' },
+          settings: { title: '設定', vibration: 'バイブレーション', voice: '音声ガイド', theme: 'テーマ', theme_auto: '自動', theme_light: 'ライト', theme_dark: 'ダーク', lang: '言語', persist_note: '設定はローカルに保存され、次回起動時に適用されます。' }
+        },
+        zh: {
+          app: 'Calm',
+          title: 'Calm — 呼吸、日记',
+          tabs: { breath: '呼吸', journal: '日记', settings: '设置' },
+          phases: { inhale: '吸气', exhale: '呼气', hold: '屏息', pause: '停顿', ready: '准备好了吗？' },
+          breathing: { title: '呼吸', mode: '呼吸模式', duration: '时长', start: '开始', stop: '停止', panic: '紧急', tips: '按照提示：吸气、屏息、呼气。保持平稳。' },
+
+          journal: { title: '日记', level: '压力等级', note: '备注', save: '保存', clear: '全部删除', empty: '暂无记录', history: '历史', note_placeholder: '简要描述你的感受...', confirm_clear: '删除所有记录？' },
+          settings: { title: '设置', vibration: '震动', voice: '语音提示', theme: '主题', theme_auto: '自动', theme_light: '浅色', theme_dark: '深色', lang: '语言', persist_note: '设置将保存在本地并在下次启动时应用。' }
+        }
+      };
+
+      function detectLang() {
+        const navLangs = (navigator.languages || [navigator.language || 'ru']).map(l => l.toLowerCase());
+        const supported = Object.keys(I18N);
+        for (const l of navLangs) {
+          const base = l.split('-')[0];
+          if (supported.includes(l)) return l;
+          if (supported.includes(base)) return base;
+        }
+        return 'ru';
+      }
+
+      let currentLang = null;
+      function setLanguage(lang) {
+        currentLang = lang || 'ru';
+        try { document.documentElement.setAttribute('lang', currentLang); } catch(e){}
+        try { applyI18n(); } catch(e) { console.error('i18n error', e); }
+        try { buildModeOptions(); updateModeInfo(); } catch(e){}
+        try { renderEntries(); } catch(e){}
+      }
+      function t(path) {
+        const [ns, key] = path.includes('.') ? path.split('.') : ['phases', path];
+        const pack = I18N[currentLang] || I18N.ru;
+        return (pack[ns] && pack[ns][key]) || (I18N.ru[ns] && I18N.ru[ns][key]) || path;
+      }
+
+      function applyI18n() {
+        try { document.title = (I18N[currentLang]?.title) || 'Calm'; } catch(e){}
+        // Tabs
+        const tabBreath = document.querySelector('header nav .tab[data-tab="breath"]'); if (tabBreath) tabBreath.textContent = t('tabs.breath');
+
+        const tabJournal = document.querySelector('header nav .tab[data-tab="journal"]'); if (tabJournal) tabJournal.textContent = t('tabs.journal');
+        const tabSettings = document.querySelector('header nav .tab[data-tab="settings"]'); if (tabSettings) tabSettings.textContent = t('tabs.settings');
+        const mtBreath = document.querySelector('.mobile-nav .tab[data-tab="breath"]'); if (mtBreath) mtBreath.textContent = t('tabs.breath');
+
+        const mtJournal = document.querySelector('.mobile-nav .tab[data-tab="journal"]'); if (mtJournal) mtJournal.textContent = t('tabs.journal');
+        const mtSettings = document.querySelector('.mobile-nav .tab[data-tab="settings"]'); if (mtSettings) mtSettings.textContent = t('tabs.settings');
+        // Sections titles and labels
+        const breathTitle = document.querySelector('#breath h1'); if (breathTitle) breathTitle.textContent = t('breathing.title');
+        const labelMode = document.querySelector('label[for="mode"]'); if (labelMode) labelMode.firstChild ? (labelMode.firstChild.textContent = t('breathing.mode')) : (labelMode.textContent = t('breathing.mode'));
+        const labelMinutes = document.querySelector('label[for="minutes"]');
+        if (labelMinutes && labelMinutes.childNodes && labelMinutes.childNodes.length >= 2) {
+          labelMinutes.childNodes[0].textContent = t('breathing.duration') + ': ';
+          const unit = document.getElementById('minutesUnit'); if (unit) unit.textContent = (currentLang==='en' ? 'min' : currentLang==='es' ? 'min' : currentLang==='ja' ? '分' : currentLang==='zh' ? '分' : 'мин');
+        }
+        const btnStart = document.getElementById('startBreath'); if (btnStart) btnStart.textContent = t('breathing.start');
+        const btnStop = document.getElementById('stopBreath'); if (btnStop) btnStop.textContent = t('breathing.stop');
+        const btnPanic = document.getElementById('panicBreath'); if (btnPanic) btnPanic.textContent = t('breathing.panic');
+        const tipsTitle = document.getElementById('tipsTitle'); if (tipsTitle) tipsTitle.textContent = t('breathing.tips').split('.')[0];
+        const tipsText = document.getElementById('tipsText'); if (tipsText) tipsText.textContent = t('breathing.tips');
+        // Update mode info against current language
+        if (typeof updateModeInfo === 'function') updateModeInfo();
+
+
+
+        const journalTitle = document.querySelector('#journal h1'); if (journalTitle) journalTitle.textContent = t('journal.title');
+        const labelLevel = document.querySelector('label[for="stressLevel"]'); if (labelLevel && labelLevel.firstChild) labelLevel.firstChild.textContent = t('journal.level') + ': ';
+        const labelNote = document.querySelector('label[for="note"]'); if (labelNote) labelNote.textContent = t('journal.note');
+        const btnSave = document.getElementById('saveEntry'); if (btnSave) btnSave.textContent = t('journal.save');
+        const btnClear = document.getElementById('clearEntries'); if (btnClear) btnClear.textContent = t('journal.clear');
+        const jHistory = document.getElementById('journalHistory'); if (jHistory) jHistory.textContent = t('journal.history');
+        const noteArea = document.getElementById('note'); if (noteArea) noteArea.placeholder = t('journal.note_placeholder');
+
+        const settingsTitle = document.querySelector('#settings h1'); if (settingsTitle) settingsTitle.textContent = t('settings.title');
+        const labelTheme = document.querySelector('label[for="themeSelect"]'); if (labelTheme) labelTheme.textContent = t('settings.theme');
+        // switches have text nodes, update them safely
+        const vib = document.getElementById('vibrationToggle'); if (vib && vib.parentElement) vib.parentElement.lastChild.textContent = ' ' + t('settings.vibration');
+        const voi = document.getElementById('voiceToggle'); if (voi && voi.parentElement) voi.parentElement.lastChild.textContent = ' ' + t('settings.voice');
+        const themeAuto = document.querySelector('#themeSelect option[value="auto"]'); if (themeAuto) themeAuto.textContent = t('settings.theme_auto');
+        const themeLight = document.querySelector('#themeSelect option[value="light"]'); if (themeLight) themeLight.textContent = t('settings.theme_light');
+        const themeDark = document.querySelector('#themeSelect option[value="dark"]'); if (themeDark) themeDark.textContent = t('settings.theme_dark');
+        const labelLang = document.querySelector('label[for="langSelect"]'); if (labelLang) labelLang.textContent = t('settings.lang');
+        const persist = document.getElementById('persistNote'); if (persist) persist.textContent = t('settings.persist_note');
+
+        // Set default phase label (safe)
+        const phaseElLocal = document.getElementById('phase');
+        if (phaseElLocal) phaseElLocal.textContent = t('phases.ready');
+      }
+
+      // ================= PERSISTENCE =================
+      const STORAGE_KEYS = {
+        settings: 'stress_settings_v1',
+        journal: 'stress_journal_v1'
+      };
+      const defaultSettings = {
+        vibration: true,
+        voice: false,
+        theme: 'auto',
+        lang: null
+      };
+      const loadSettings = () => {
+        try { return { ...defaultSettings, ...JSON.parse(localStorage.getItem(STORAGE_KEYS.settings) || '{}') }; }
+        catch { return { ...defaultSettings }; }
+      };
+      const saveSettings = (s) => localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(s));
+      let SETTINGS = loadSettings();
+      // Language init: detect once if not saved
+      currentLang = SETTINGS.lang || detectLang();
+      SETTINGS.lang = currentLang; saveSettings(SETTINGS);
+
+      const applyTheme = (theme) => {
+        document.documentElement.setAttribute('data-theme', theme || 'auto');
+      };
+      applyTheme(SETTINGS.theme);
+      // Apply initial language and i18n
+      setLanguage(currentLang);
+
+      // ================= NAVIGATION =================
+      const tabs = document.querySelectorAll('.tab');
+      const sections = document.querySelectorAll('main > section');
+      function showTab(id) {
+        sections.forEach(s => s.hidden = s.id !== id);
+        tabs.forEach(t => t.setAttribute('aria-current', t.dataset.tab === id ? 'page' : 'false'));
+        history.replaceState({}, '', `#${id}`);
+      }
+      tabs.forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+      // Also wire mobile tabs
+      document.querySelectorAll('.mobile-nav .tab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+      showTab(location.hash.replace('#','') || 'breath');
+
+      // ================ BREATHING ENGINE ================
+      const orb = document.getElementById('orb');
+      const orbCanvas = document.getElementById('orbCanvas');
+      const orbBackdrop = document.getElementById('orbBackdrop');
+      let orbCtx = null;
+      function setOrbScale(scale) {
+        if (orb) orb.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        if (orbCanvas) orbCanvas.style.transform = `scale(${scale})`;
+      }
+      const phaseEl = document.getElementById('phase');
+      const timeLeftEl = document.getElementById('timeLeft');
+      const modeSel = document.getElementById('mode');
+      const minutes = document.getElementById('minutes');
+      const minutesLabel = document.getElementById('minutesLabel');
+      const modeInfo = document.getElementById('modeInfo');
+      minutes.addEventListener('input', () => minutesLabel.textContent = minutes.value);
+      minutesLabel.textContent = minutes.value;
+
+      const MODE_LABELS = {
+        478: { key: '478', name: { ru:'4–7–8', en:'4–7–8', es:'4–7–8', ja:'4–7–8', zh:'4–7–8' }, numbers: '4–7–8' },
+        box: { key: 'box', name: { ru:'Квадратное дыхание', en:'Box Breathing', es:'Respiración en caja', ja:'ボックスブリージング', zh:'方块呼吸' }, numbers: '4–4–4–4' },
+        coh: { key: 'coh', name: { ru:'Когерентное дыхание', en:'Coherent Breathing', es:'Respiración coherente', ja:'コヒーレント呼吸', zh:'相干呼吸' }, numbers: '5–5' }
+      };
+      function buildModeOptions() {
+        const data = [ '478', 'box', 'coh' ];
+        const prev = modeSel ? modeSel.value : '478';
+        modeSel.innerHTML = '';
+        for (const val of data) {
+          const info = MODE_LABELS[val];
+          const opt = document.createElement('option');
+          opt.value = val;
+          const name = (info.name[currentLang] || info.name['en']);
+          opt.textContent = `${name} — ${info.numbers}`;
+          modeSel.appendChild(opt);
+        }
+        // restore previous selection when possible
+        modeSel.value = data.includes(prev) ? prev : '478';
+      }
+      function updateModeInfo() {
+        const val = modeSel.value;
+        const info = MODE_LABELS[val];
+        if (!info || !modeInfo) return;
+        const name = (info.name[currentLang] || info.name['en']);
+        modeInfo.textContent = `${name} (${info.numbers})`;
+      }
+      modeSel.addEventListener('change', updateModeInfo);
+      buildModeOptions();
+      updateModeInfo();
+
+      let breathTimer = null;
+      let panicMode = false;
+      let breathRaf = 0;
+      let breathSession = null;
+      let currentScale = 1;
+
+      function vibrate(ms) {
+        if (!SETTINGS.vibration) return;
+        if (navigator.vibrate) navigator.vibrate(ms);
+      }
+
+      // Speech synthesis (RU voice preferred)
+      function speak(text) {
+        if (!SETTINGS.voice) return;
+        if (!('speechSynthesis' in window)) return;
+        const u = new SpeechSynthesisUtterance(text);
+        const voices = speechSynthesis.getVoices();
+        const lang = currentLang || 'ru';
+        const voiceMatch = voices.find(v => (v.lang || '').toLowerCase().startsWith(lang));
+        if (voiceMatch) u.voice = voiceMatch;
+        u.rate = panicMode ? 1.05 : 1;
+        u.pitch = 1;
+        speechSynthesis.cancel(); // avoid queue buildup
+        speechSynthesis.speak(u);
+      }
+      // load voices asynchronously
+      if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = () => {};
+
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const fmt = (s) => String(Math.floor(s/60)).padStart(2,'0') + ':' + String(Math.floor(s%60)).padStart(2,'0');
+
+      let orbAnimations = [];
+      function cancelOrbAnimations() {
+        try { orbAnimations.forEach(a => a.cancel()); } catch(e){}
+        orbAnimations = [];
+      }
+      function resizeOrbImmediate(scale) { currentScale = scale; setOrbScale(scale); }
+
+      // ================ ORB PARTICLES ================
+      function initOrbCanvas() {
+        if (!orbCanvas) return;
+        orbCtx = orbCanvas.getContext('2d');
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        const shell = document.querySelector('.orb-shell');
+        const rect = shell ? shell.getBoundingClientRect() : orbCanvas.getBoundingClientRect();
+        orbCanvas.width = Math.floor(rect.width * dpr);
+        orbCanvas.height = Math.floor(rect.height * dpr);
+        orbCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        orbCtx.imageSmoothingEnabled = true;
+        orbCtx.imageSmoothingQuality = 'high';
+      }
+
+      const particles = [];
+      let particlesTick = 0;
+      function resetParticles() {
+        particles.length = 0;
+        const shell = document.querySelector('.orb-shell');
+        const rect = shell ? shell.getBoundingClientRect() : orbCanvas.getBoundingClientRect();
+        const count = Math.floor(Math.max(60, Math.min(160, rect.width * 0.35))); // больше частиц
+        for (let i = 0; i < count; i++) {
+          particles.push({
+            x: Math.random() * rect.width,
+            y: Math.random() * rect.height,
+            rBase: Math.random() * 2.8 + 0.6,  // разные размеры, крупнее
+            r: 1,
+            vx: (Math.random() - 0.5) * 0.22,
+            vy: (Math.random() - 0.5) * 0.22,
+            a: Math.random() * 0.25 + 0.10,
+            phaseOffset: Math.random() * Math.PI * 2, // разный такт
+            phaseSpeed: 0.6 + Math.random() * 1.2
+          });
+        }
+      }
+
+      function renderParticles() {
+        if (!orbCtx) return;
+        const shell = document.querySelector('.orb-shell');
+        const rect = shell ? shell.getBoundingClientRect() : orbCanvas.getBoundingClientRect();
+        orbCtx.clearRect(0, 0, rect.width, rect.height);
+        orbCtx.globalCompositeOperation = 'lighter';
+        for (const p of particles) {
+          orbCtx.beginPath();
+          const gradient = orbCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+          gradient.addColorStop(0, `rgba(255,255,255,${p.a})`);
+          gradient.addColorStop(1, 'rgba(255,255,255,0)');
+          orbCtx.fillStyle = gradient;
+          orbCtx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+          orbCtx.fill();
+        }
+        orbCtx.globalCompositeOperation = 'source-over';
+      }
+
+      function stepParticles() {
+        const shell = document.querySelector('.orb-shell');
+        const rect = shell ? shell.getBoundingClientRect() : orbCanvas.getBoundingClientRect();
+        particlesTick += 0.016;
+        for (const p of particles) {
+          p.x += p.vx;
+          p.y += p.vy;
+          // Пульсация каждой частицы с разным тактом
+          const scale = 0.8 + 0.4 * Math.sin(particlesTick * p.phaseSpeed + p.phaseOffset);
+          p.r = p.rBase * Math.max(0.6, scale);
+          if (p.x < -5) p.x = rect.width + 5; else if (p.x > rect.width + 5) p.x = -5;
+          if (p.y < -5) p.y = rect.height + 5; else if (p.y > rect.height + 5) p.y = -5;
+        }
+      }
+
+      function tick() {
+        stepParticles();
+        renderParticles();
+        requestAnimationFrame(tick);
+      }
+
+      function setupParticles() {
+        initOrbCanvas();
+        resetParticles();
+        renderParticles();
+      }
+
+      window.addEventListener('resize', () => {
+        const wasLen = particles.length;
+        initOrbCanvas();
+        resetParticles();
+        // keep particle count roughly stable
+        while (particles.length > wasLen) particles.pop();
+      });
+      // Re-init particles when switching to breath tab
+      document.querySelectorAll('.tab').forEach(el => el.addEventListener('click', (e) => {
+        if (e.currentTarget.dataset.tab === 'breath') {
+          initOrbCanvas();
+          resetParticles();
+        }
+      }));
+
+      function getPattern(mode) {
+        switch(mode) {
+          case '478': return { seq: [
+            {key:'inhale', labelKey:'inhale', secs: 4, scale: 1.35},
+            {key:'hold', labelKey:'hold', secs: 7, scale: 1.35},
+            {key:'exhale', labelKey:'exhale', secs: 8, scale: 0.70},
+          ], loopPause: 1 };
+          case 'box': return { seq: [
+            {key:'inhale', labelKey:'inhale', secs: 4, scale: 1.35},
+            {key:'hold', labelKey:'hold', secs: 4, scale: 1.35},
+            {key:'exhale', labelKey:'exhale', secs: 4, scale: 0.70},
+            {key:'pause', labelKey:'pause', secs: 4, scale: 0.70},
+          ] };
+          case 'coh': return { seq: [
+            {key:'inhale', labelKey:'inhale', secs: 5, scale: 1.30},
+            {key:'exhale', labelKey:'exhale', secs: 5, scale: 0.80},
+          ] };
+        }
+        return { seq: [] };
+      }
+
+      function startBreathing({ panic=false } = {}) {
+        if (breathTimer) return; // already running
+        const mode = panic ? '478' : modeSel.value;
+        const mins = panic ? 1 : Number(minutes.value);
+        const pattern = getPattern(mode);
+        const factor = panic ? 0.7 : 1.0;
+        panicMode = panic;
+        orb.classList.toggle('panic', panic);
+        if (panic) SETTINGS.voice = false;
+        const totalMs = mins * 60 * 1000;
+        const startedAt = Date.now();
+        if (orbBackdrop) orbBackdrop.classList.add('active');
+        // Prepare session
+        breathSession = {
+          pattern,
+          factor,
+          stepIndex: 0,
+          stepStartMs: performance.now(),
+          startedAt,
+          totalMs,
+          fromScale: currentScale,
+          targetScale: pattern.seq[0] ? pattern.seq[0].scale : 1,
+        };
+        // Announce first label
+        if (pattern.seq[0]) {
+          const label = t(pattern.seq[0].labelKey);
+          phaseEl.textContent = label;
+          speak(label);
+          vibrate(40);
+        }
+        breathTimer = true;
+        if (breathRaf) cancelAnimationFrame(breathRaf);
+        const loop = () => {
+          if (!breathTimer || !breathSession) return;
+          const nowPerf = performance.now();
+          const now = Date.now();
+          const elapsedS = Math.floor((now - breathSession.startedAt)/1000);
+          const remaining = Math.max(0, Math.ceil((breathSession.totalMs - (now - breathSession.startedAt))/1000));
+          timeLeftEl.textContent = fmt(remaining);
+          const step = breathSession.pattern.seq[breathSession.stepIndex];
+          if (!step) { stopBreathing(); return; }
+          const stepDurMs = step.secs * breathSession.factor * 1000;
+          const p = Math.min(1, Math.max(0, (nowPerf - breathSession.stepStartMs) / stepDurMs));
+          // Interpolate only for inhale/exhale; hold/pause keep scale
+          if (step.key === 'inhale' || step.key === 'exhale') {
+            const s = breathSession.fromScale + (step.scale - breathSession.fromScale) * p;
+            currentScale = s;
+            setOrbScale(s);
+          } else {
+            currentScale = step.scale;
+            setOrbScale(step.scale);
+          }
+          if (p >= 1) {
+            // Next step
+            breathSession.stepIndex = (breathSession.stepIndex + 1) % breathSession.pattern.seq.length;
+            breathSession.stepStartMs = nowPerf;
+            breathSession.fromScale = currentScale;
+            const next = breathSession.pattern.seq[breathSession.stepIndex];
+            breathSession.targetScale = next.scale;
+            const label = t(next.labelKey);
+            phaseEl.textContent = label;
+            speak(label);
+            vibrate(40);
+          }
+          if ((now - breathSession.startedAt) >= breathSession.totalMs) { stopBreathing(); return; }
+          breathRaf = requestAnimationFrame(loop);
+        };
+        breathRaf = requestAnimationFrame(loop);
+      }
+      function stopBreathing() {
+        breathTimer = null;
+        panicMode = false;
+        breathSession = null;
+        if (breathRaf) cancelAnimationFrame(breathRaf);
+        orb.classList.remove('panic');
+        phaseEl.textContent = t('phases.ready');
+        timeLeftEl.textContent = '00:00';
+        if ('speechSynthesis' in window) speechSynthesis.cancel();
+        // softly return to neutral size
+        resizeOrbImmediate(1.0);
+        if (orbBackdrop) orbBackdrop.classList.remove('active');
+      }
+      const btnStartEl = document.getElementById('startBreath'); if (btnStartEl) btnStartEl.addEventListener('click', () => startBreathing());
+      const btnStopEl = document.getElementById('stopBreath'); if (btnStopEl) btnStopEl.addEventListener('click', stopBreathing);
+      const btnPanicEl = document.getElementById('panicBreath'); if (btnPanicEl) btnPanicEl.addEventListener('click', () => startBreathing({ panic: true }));
+      // Start/stop by tapping the orb
+      document.querySelector('.orb-shell').addEventListener('click', () => {
+        if (breathTimer) stopBreathing(); else startBreathing();
+      });
+
+
+
+      
+
+      
+
+
+
+
+
+      // ================ JOURNAL =================
+      const entriesEl = document.getElementById('entries');
+      const level = document.getElementById('stressLevel');
+      const levelLabel = document.getElementById('stressLevelLabel');
+      const note = document.getElementById('note');
+      level.addEventListener('input', () => levelLabel.textContent = level.value);
+      levelLabel.textContent = level.value;
+
+      function loadEntries() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.journal) || '[]'); }
+        catch { return []; }
+      }
+      function saveEntries(arr) {
+        localStorage.setItem(STORAGE_KEYS.journal, JSON.stringify(arr));
+      }
+      function renderEntries() {
+        const arr = loadEntries();
+        entriesEl.innerHTML = '';
+        if (arr.length === 0) {
+          const li = document.createElement('li');
+          li.className = 'item';
+          li.innerHTML = `<div class="meta">${t('journal.empty')}</div>`;
+          entriesEl.appendChild(li);
+          return;
+        }
+        for (const it of arr.slice().reverse()) {
+          const li = document.createElement('li');
+          li.className = 'item';
+          li.innerHTML = `<div><strong>${it.level}/10</strong></div><div class="meta">${formatDate(it.ts)}</div>${it.note ? `<div>${escapeHtml(it.note)}</div>` : ''}`;
+          entriesEl.appendChild(li);
+        }
+      }
+      function formatDate(ts) {
+        try {
+          const localeMap = { en: 'en', ru: 'ru', es: 'es', ja: 'ja', zh: 'zh-CN' };
+          const locale = localeMap[currentLang] || currentLang || 'en';
+          const df = new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+          return df.format(new Date(ts));
+        } catch (e) { return new Date(ts).toLocaleString(); }
+      }
+      function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+      }
+      document.getElementById('saveEntry').addEventListener('click', () => {
+        const arr = loadEntries();
+        arr.push({ ts: Date.now(), level: Number(level.value), note: (note.value||'').trim() });
+        saveEntries(arr);
+        note.value='';
+        renderEntries();
+      });
+      document.getElementById('clearEntries').addEventListener('click', () => {
+        if (confirm(t('journal.confirm_clear'))) { saveEntries([]); renderEntries(); }
+      });
+      renderEntries();
+
+      // ================ SETTINGS =================
+      const vibrationToggle = document.getElementById('vibrationToggle');
+      const voiceToggle = document.getElementById('voiceToggle');
+      const themeSelect = document.getElementById('themeSelect');
+      const langSelect = document.getElementById('langSelect');
+      function applySettingsUI() {
+        vibrationToggle.checked = !!SETTINGS.vibration;
+        voiceToggle.checked = !!SETTINGS.voice;
+        themeSelect.value = SETTINGS.theme || 'auto';
+        langSelect.value = SETTINGS.lang || 'auto';
+      }
+      applySettingsUI();
+      vibrationToggle.addEventListener('change', () => { SETTINGS.vibration = vibrationToggle.checked; saveSettings(SETTINGS); vibrate(25); });
+      voiceToggle.addEventListener('change',   () => { SETTINGS.voice = voiceToggle.checked; saveSettings(SETTINGS); if (SETTINGS.voice) speak('Голос включён'); });
+      themeSelect.addEventListener('change',  () => { SETTINGS.theme = themeSelect.value; saveSettings(SETTINGS); applyTheme(SETTINGS.theme); });
+      langSelect.addEventListener('change',   () => {
+        const val = langSelect.value;
+        const next = (val === 'auto') ? detectLang() : val;
+        SETTINGS.lang = next; saveSettings(SETTINGS);
+        setLanguage(next);
+      });
+
+      // ================ INIT PARTICLES LOOP ================
+      setupParticles();
+      requestAnimationFrame(tick);
+
+      // ================ PWA =================
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js').catch(()=>{});
+        });
+      }
+    </script>
+  </body>
+</html>
+
+
