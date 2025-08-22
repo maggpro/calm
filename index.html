@@ -482,6 +482,32 @@
       }
     }
     
+    /* Haptic Feedback CSS animations for iOS fallback */
+    @keyframes haptic-inhale {
+      0%, 100% { transform: scale(1); }
+      25% { transform: scale(1.001); }
+      50% { transform: scale(1.002); }
+      75% { transform: scale(1.001); }
+    }
+    
+    @keyframes haptic-exhale {
+      0%, 100% { transform: scale(1); }
+      20% { transform: scale(1.001); }
+      40% { transform: scale(1.002); }
+      60% { transform: scale(1.001); }
+      80% { transform: scale(1.002); }
+    }
+    
+    @keyframes haptic-hold {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.002); }
+    }
+    
+    @keyframes haptic-default {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.001); }
+    }
+    
     /* Form elements */
     .form-group {
       margin-bottom: 20px;
@@ -1398,6 +1424,54 @@
       nextPhase();
     }
     
+    // Universal haptic feedback function (Android + iOS)
+    function triggerHapticFeedback(type) {
+      // Проверяем поддержку Web Vibration API (Android)
+      if ('vibrate' in navigator) {
+        switch (type) {
+          case 'inhale':
+            navigator.vibrate([200, 100, 200]);
+            break;
+          case 'exhale':
+            navigator.vibrate([100, 50, 100, 50, 100]);
+            break;
+          case 'hold':
+            navigator.vibrate(300);
+            break;
+          default:
+            navigator.vibrate(100);
+        }
+        return;
+      }
+      
+      // iOS Haptic Feedback (если доступен)
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hapticFeedback) {
+        // Отправляем сообщение в нативное приложение iOS
+        window.webkit.messageHandlers.hapticFeedback.postMessage({ type: type });
+        return;
+      }
+      
+      // Fallback для iOS через CSS анимации (имитация вибрации)
+      if (type === 'inhale') {
+        // Длинная "вибрация" через CSS
+        document.body.style.animation = 'haptic-inhale 0.5s ease-in-out';
+      } else if (type === 'exhale') {
+        // Короткие "вибрации" через CSS
+        document.body.style.animation = 'haptic-exhale 0.3s ease-in-out';
+      } else if (type === 'hold') {
+        // Одна длинная "вибрация" через CSS
+        document.body.style.animation = 'haptic-hold 0.3s ease-in-out';
+      } else {
+        // Стандартная "вибрация" через CSS
+        document.body.style.animation = 'haptic-default 0.2s ease-in-out';
+      }
+      
+      // Очищаем анимацию
+      setTimeout(() => {
+        document.body.style.animation = '';
+      }, type === 'inhale' ? 500 : type === 'exhale' ? 300 : type === 'hold' ? 300 : 200);
+    }
+    
     function updatePhaseDisplay(phase, duration) {
       const phaseElement = document.getElementById('phase');
       const orb = document.getElementById('orb');
@@ -1451,20 +1525,20 @@
         speechSynthesis.speak(utterance);
       }
       
-      // Vibration with different patterns for different phases
-      if (document.getElementById('vibrationToggle').checked && 'vibrate' in navigator) {
+      // Universal haptic feedback for different phases (Android + iOS)
+      if (document.getElementById('vibrationToggle').checked) {
         if (phase === 'inhale') {
           // Длинная вибрация для вдоха
-          navigator.vibrate([200, 100, 200]);
+          triggerHapticFeedback('inhale');
         } else if (phase === 'exhale') {
           // Короткие вибрации для выдоха
-          navigator.vibrate([100, 50, 100, 50, 100]);
+          triggerHapticFeedback('exhale');
         } else if (phase === 'hold') {
           // Одна длинная вибрация для задержки
-          navigator.vibrate(300);
+          triggerHapticFeedback('hold');
         } else {
           // Стандартная вибрация для других фаз
-          navigator.vibrate(100);
+          triggerHapticFeedback('default');
         }
       }
     }
