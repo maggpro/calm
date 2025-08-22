@@ -1,6 +1,6 @@
 // Service Worker: офлайн-кэш и быстрые повторные загрузки
 // Версия кэша меняйте при изменениях файлов, чтобы актуализировать кэш
-const CACHE_VERSION = 'v1.9.11';
+const CACHE_VERSION = 'v1.9.14';
 const CACHE_NAME = `calm-cache-${CACHE_VERSION}`;
 const OFFLINE_ASSETS = [
   './',
